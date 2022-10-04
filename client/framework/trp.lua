@@ -40,21 +40,16 @@ function GroupRank(groupid)
 end
 
 function PlayerHasGroups(filter)
-    local _type = type(filter)
-    local grade = filter.grade or 1
-
-    if filter.job then
-        if type(filter.job) == "table" then
-            for k, job in pairs(filter.job) do
-                if job == Job and GroupRank(Job) >= grade then
-                    return true
-                end
+    if filter.jobs then
+        for k, entry in pairs(filter.jobs) do
+            if entry.job == Job and (entry.grade or 1) == JobGrade then
+                return true
             end
-        else
-            return Job == filter.job and JobGrade >= grade
         end
+    elseif filter.job then
+        return Job == filter.job and JobGrade >= (filter.grade or 1)
     elseif filter.company then
-        return GroupRank(filter.company) >= grade
+        return GroupRank(filter.company) >= (filter.grade or 1)
     end
 end
 
