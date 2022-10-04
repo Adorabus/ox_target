@@ -32,6 +32,7 @@ local function convert(options)
         v.job = nil
         v.item = nil
         v.required_item = nil
+        v.qtarget = true
     end
 
     return options
@@ -93,6 +94,17 @@ exportHandler('RemoveZone', function(id)
             Zones[id]:remove()
         end
     end
+end)
+
+exportHandler('AddTargetBone', function(bones, options)
+    if type(bones) ~= 'table' then bones = { bones } end
+    options = convert(options)
+
+    for _, v in pairs(options) do
+        v.bones = bones
+    end
+
+    exports.ox_target:addGlobalVehicle(options)
 end)
 
 exportHandler('AddTargetEntity', function(entities, options)
