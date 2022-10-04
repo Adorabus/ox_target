@@ -44,7 +44,15 @@ function PlayerHasGroups(filter)
     local grade = filter.grade or 1
 
     if filter.job then
-        return Job == filter.job and JobGrade >= grade
+        if type(filter.job) == "table" then
+            for k, job in pairs(filter.job) do
+                if job == Job and GroupRank(Job) >= grade then
+                    return true
+                end
+            end
+        else
+            return Job == filter.job and JobGrade >= grade
+        end
     elseif filter.company then
         return GroupRank(filter.company) >= grade
     end
