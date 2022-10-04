@@ -42,13 +42,15 @@ end
 function PlayerHasGroups(filter)
     if filter.jobs then
         for k, entry in pairs(filter.jobs) do
-            if entry.id == Job and (entry.grade or 1) == JobGrade then
+            entry.grade = entry.grade or 1
+            if entry.id == Job and JobGrade >= entry.grade then
                 return true
             end
         end
     elseif filter.companies then
         for k, entry in pairs(filter.companies) do
-            if GroupRank(entry.id) >= (entry.grade or 1) then
+            entry.grade = entry.grade or 1
+            if GroupRank(entry.id) >= entry.grade then
                 return true
             end
         end
