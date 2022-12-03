@@ -1,9 +1,13 @@
-Debug = GetConvarInt('ox_target:debug', 0) == 1
-if not Debug then return end
-
 AddEventHandler('ox_target:debug', function(data)
+    if data.entity then
+        data.archetype = GetEntityArchetypeName(data.entity)
+        data.model = GetEntityModel(data.entity)
+    end
+
 	print(json.encode(data, {indent=true}))
 end)
+
+if GetConvarInt('ox_target:debug', 0) ~= 1 then return end
 
 local ox_target = exports.ox_target
 local drawZones = true
@@ -19,10 +23,7 @@ ox_target:addBoxZone({
             name = 'box',
             event = 'ox_target:debug',
             icon = 'fa-solid fa-cube',
-            label = '(Debug) Box',
-            canInteract = function(entity, coords, distance)
-                return true
-            end
+            label = locale('debug_box'),
         }
     }
 })
@@ -37,10 +38,7 @@ ox_target:addSphereZone({
             name = 'sphere',
             event = 'ox_target:debug',
             icon = 'fa-solid fa-circle',
-            label = '(Debug) Sphere',
-            canInteract = function(entity, coords, distance)
-                return true
-            end
+            label = locale('debug_sphere'),
         }
     }
 })
@@ -50,10 +48,7 @@ ox_target:addModel(`police`, {
         name = 'police',
         event = 'ox_target:debug',
         icon = 'fa-solid fa-handcuffs',
-        label = 'Police car',
-        canInteract = function(entity, coords, distance)
-            return true
-        end
+        label = locale('debug_police_car'),
     }
 })
 
@@ -62,10 +57,7 @@ ox_target:addGlobalPed({
         name = 'ped',
         event = 'ox_target:debug',
         icon = 'fa-solid fa-male',
-        label = '(Debug) Ped',
-        canInteract = function(entity, coords, distance)
-            return true
-        end
+        label = locale('debug_ped'),
     }
 })
 
@@ -74,10 +66,7 @@ ox_target:addGlobalVehicle({
         name = 'vehicle',
         event = 'ox_target:debug',
         icon = 'fa-solid fa-car',
-        label = '(Debug) Vehicle',
-        canInteract = function(entity, coords, distance)
-            return true
-        end
+        label = locale('debug_vehicle'),
     }
 })
 
@@ -86,9 +75,6 @@ ox_target:addGlobalObject({
         name = 'object',
         event = 'ox_target:debug',
         icon = 'fa-solid fa-bong',
-        label = '(Debug) Object',
-        canInteract = function(entity, coords, distance)
-            return true
-        end
+        label = locale('debug_object'),
     }
 })

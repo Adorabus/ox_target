@@ -19,88 +19,96 @@ local function setNuiFocus(state, cursor)
     SetNuiFocusKeepInput(state)
 end
 
+local SendNuiMessage = SendNuiMessage
+local GetEntityCoords = GetEntityCoords
 local RaycastFromCamera = RaycastFromCamera
 local GetEntityType = GetEntityType
 local HasEntityClearLosToEntity = HasEntityClearLosToEntity
-local SendNuiMessage = SendNuiMessage
 local GetCurrentZone = GetCurrentZone
 local PlayerHasGroups = PlayerHasGroups or function() return true end
 local PlayerHasItems = PlayerHasItems or function() return true end
 local GetEntityBoneIndexByName = GetEntityBoneIndexByName
 local GetWorldPositionOfEntityBone = GetWorldPositionOfEntityBone
+local next = next
 local GetEntityModel = GetEntityModel
 local GetEntityOptions = GetEntityOptions
 local IsDisabledControlJustPressed = IsDisabledControlJustPressed
 local DisableControlAction = DisableControlAction
 local DisablePlayerFiring = DisablePlayerFiring
-local options
+local options = {}
 local currentTarget = {}
 
 -- Toggle ox_target, instead of holding the hotkey
 local toggleHotkey = GetConvarInt('ox_target:toggleHotkey', 0) == 1
+local mouseButton = GetConvarInt('ox_target:leftClick', 1) == 1 and 24 or 25
+local debug = GetConvarInt('ox_target:debug', 0) == 1
 
 local function enableTargeting()
     if isDisabled or isActive or IsNuiFocused() or IsPauseMenuActive() then return end
     SendNuiMessage('{"event": "visible", "state": true}')
 
     isActive = true
+    local flag, hit, entityHit, endCoords, distance, currentZone, nearbyZones, lastEntity, entityType, entityModel, hasTick = 511
     local getNearbyZones, drawSprites = DrawSprites()
-    local currentZone, nearbyZones, lastEntity, entityType, entityModel
-    local flag = 1
 
     while isActive do
-        local hit, entityHit, endCoords = RaycastFromCamera(flag)
-
-        if not hit then
-            flag = flag == 26 and 1 or 26
-            hit, entityHit, endCoords = RaycastFromCamera(flag)
-        end
-
         local playerCoords = GetEntityCoords(cache.ped)
-        local distance = #(playerCoords - endCoords)
+        hit, entityHit, endCoords = RaycastFromCamera(flag)
+        entityType = entityHit ~= 0 and GetEntityType(entityHit) or 0
+        distance = #(playerCoords - endCoords)
+
+        if entityType == 0 then
+            local _flag = flag == 511 and 26 or 511
+            local _hit, _entityHit, _endCoords = RaycastFromCamera(_flag)
+            local _distance = #(playerCoords - _endCoords)
+
+            if _distance < distance then
+                flag, hit, entityHit, endCoords, distance = _flag, _hit, _entityHit, _endCoords, _distance
+                entityType = entityHit ~= 0 and GetEntityType(entityHit) or 0
+            end
+        end
 
         if hit and distance < 7 then
             local newOptions
-
-            if lastEntity ~= entityHit then
-                if flag ~= 1 and entityHit then
-                    entityHit = HasEntityClearLosToEntity(entityHit, cache.ped, 7) and entityHit or 0
-                end
-
-                entityType = entityHit ~= 0 and GetEntityType(entityHit)
-
-                if entityType then
-                    local success, result = pcall(GetEntityModel, entityHit)
-                    entityModel = success and result
-
-                    if entityType == 0 and entityModel then
-                        entityType = 3
-                    else SendNuiMessage('{"event": "leftTarget"}') end
-
-                    if entityModel then
-                        newOptions = GetEntityOptions(entityHit, entityType, entityModel)
-                    elseif options then
-                        table.wipe(options)
-                    end
-
-                    if Debug then
-                        if lastEntity then
-                            SetEntityDrawOutline(lastEntity, false)
-                        end
-
-                        if entityType ~= 1 then
-                            SetEntityDrawOutline(entityHit, true)
-                        end
-                    end
-                end
-            end
+            local lastZone = currentZone
 
             if getNearbyZones then
                 ---@type CZone[]?, CZone?
-                nearbyZones, currentZone = getNearbyZones(endCoords, currentZone)
+                nearbyZones, currentZone = getNearbyZones(endCoords)
             else
                 ---@type CZone?
-                currentZone = GetCurrentZone(endCoords, currentZone)
+                currentZone = GetCurrentZone(endCoords)
+            end
+
+            if lastZone ~= currentZone or entityHit ~= lastEntity then
+                if next(options) then
+                    table.wipe(options)
+                    SendNuiMessage('{"event": "leftTarget"}')
+                end
+
+                if flag ~= 511 then
+                    entityHit = HasEntityClearLosToEntity(entityHit, cache.ped, 7) and entityHit or 0
+                end
+
+                if lastEntity ~= entityHit and debug then
+                    if lastEntity then
+                        SetEntityDrawOutline(lastEntity, false)
+                    end
+
+                    if entityType ~= 1 then
+                        SetEntityDrawOutline(entityHit, true)
+                    end
+                end
+
+                if entityHit ~= 0 then
+                    local success, result = pcall(GetEntityModel, entityHit)
+                    entityModel = success and result
+
+                    if entityModel then
+                        newOptions = GetEntityOptions(entityHit, entityType, entityModel)
+                    end
+
+                end
             end
 
             options = newOptions or options or {}
@@ -207,59 +215,65 @@ local function enableTargeting()
                     }, { sort_keys=true }))
                 end
             end
-
-            for i = 1, 10 do
-                if not isActive then break end
-
-                if Debug then
-                    ---@diagnostic disable-next-line: param-type-mismatch
-                    DrawMarker(28, endCoords.x, endCoords.y, endCoords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.2, 255, 42, 24, 100, false, false, 0, true, false, false, false)
-                end
-
-                if nearbyZones then
-                    drawSprites(endCoords)
-                end
-
-                DisablePlayerFiring(cache.playerId, true)
-                DisableControlAction(0, 25, true)
-
-                if hasFocus then
-                    DisableControlAction(0, 1, true)
-                    DisableControlAction(0, 2, true)
-
-                    if options and IsDisabledControlJustPressed(0, 25) then
-                        setNuiFocus(false, false)
-                    end
-                elseif options and IsDisabledControlJustPressed(0, 25) then
-                    setNuiFocus(true, true)
-                end
-
-                if i ~= 10 then Wait(0) end
-            end
         elseif lastEntity then
-            if Debug then SetEntityDrawOutline(lastEntity, false) end
+            if debug then SetEntityDrawOutline(lastEntity, false) end
             if options then table.wipe(options) end
             SendNuiMessage('{"event": "leftTarget"}')
             lastEntity = nil
         else Wait(50) end
 
-        if not options or not next(options) then
-            flag = flag == 26 and 1 or 26
-        end
-
         if toggleHotkey and IsPauseMenuActive() then
             isActive = false
         end
+
+        if not hasTick then
+            hasTick = true
+
+            CreateThread(function()
+                while isActive do
+                    if debug then
+                        ---@diagnostic disable-next-line: param-type-mismatch
+                        DrawMarker(28, endCoords.x, endCoords.y, endCoords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.2, 255, 42, 24, 100, false, false, 0, true, false, false, false)
+                    end
+
+                    if nearbyZones then
+                        drawSprites(endCoords)
+                    end
+
+                    DisablePlayerFiring(cache.playerId, true)
+                    DisableControlAction(0, 25, true)
+
+                    if hasFocus then
+                        DisableControlAction(0, 1, true)
+                        DisableControlAction(0, 2, true)
+
+                        if options and IsDisabledControlJustPressed(0, 25) then
+                            setNuiFocus(false, false)
+                        end
+                    elseif options and IsDisabledControlJustPressed(0, mouseButton) then
+                        setNuiFocus(true, true)
+                    end
+
+                    Wait(0)
+                end
+            end)
+        end
+
+        if not next(options) then
+            flag = flag == 511 and 26 or 511
+        end
+
+        Wait(60)
     end
 
-    if lastEntity and Debug then
+    if lastEntity and debug then
         SetEntityDrawOutline(lastEntity, false)
     end
 
     setNuiFocus(false)
     SendNuiMessage('{"event": "visible", "state": false}')
     table.wipe(currentTarget)
-    options = nil
+    table.wipe(options)
 end
 
 local function disableTargeting()
@@ -278,11 +292,11 @@ if toggleHotkey then
         return enableTargeting()
     end, false)
 
-    RegisterKeyMapping("ox_target", "Toggle targeting", "keyboard", hotkey)
+    RegisterKeyMapping('ox_target', locale('toggle_targeting'), 'keyboard', hotkey)
 else
     RegisterCommand('+ox_target', function() CreateThread(enableTargeting) end, false)
     RegisterCommand('-ox_target', disableTargeting, false)
-    RegisterKeyMapping('+ox_target', 'Toggle targeting', 'keyboard', hotkey)
+    RegisterKeyMapping('+ox_target', locale('toggle_targeting'), 'keyboard', hotkey)
 end
 
 local function getResponse(option, server)
@@ -292,8 +306,8 @@ local function getResponse(option, server)
     response.coords = currentTarget.coords
     response.distance = currentTarget.distance
 
-    if server and response.entity then
-        response.entity = NetworkGetNetworkIdFromEntity(response.entity)
+    if server then
+        response.entity = response.entity ~= 0 and NetworkGetEntityIsNetworked(response.entity) and NetworkGetNetworkIdFromEntity(response.entity) or 0
     end
 
     response.icon = nil

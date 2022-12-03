@@ -116,10 +116,17 @@ local function convert(options)
 end
 
 exportHandler('AddBoxZone', function(name, center, length, width, options, targetoptions)
+    local z = center.z
+
+    if not options.useZ then
+        z = z + math.abs(options.maxZ - options.minZ) / 2
+        center = vec3(center.x, center.y, z)
+    end
+
     return lib.zones.box({
         name = name,
         coords = center,
-        size = vec3(width, length, math.abs(options.maxZ - options.minZ)),
+        size = vec3(width, length, (options.useZ or not options.maxZ) and center.z or math.abs(options.maxZ - options.minZ)),
         debug = options.debugPoly,
         rotation = options.heading,
         options = convert(targetoptions),
@@ -185,11 +192,32 @@ exportHandler('AddTargetBone', function(bones, options)
 end)
 
 exportHandler('AddTargetEntity', function(entities, options)
-    target.addEntity(entities, convert(options))
+    if type(entities) ~= 'table' then entities = { entities } end
+    options = convert(options)
+
+    for i = 1, #entities do
+        local entity = entities[i]
+
+        if NetworkGetEntityIsNetworked(entity) then
+            target.addEntity(NetworkGetNetworkIdFromEntity(entity), options)
+        else
+            target.addLocalEntity(entity, options)
+        end
+    end
 end)
 
 exportHandler('RemoveTargetEntity', function(entities, labels)
-    target.removeEntity(entities, labels)
+    if type(entities) ~= 'table' then entities = { entities } end
+
+    for i = 1, #entities do
+        local entity = entities[i]
+
+        if NetworkGetEntityIsNetworked(entity) then
+            target.removeEntity(NetworkGetNetworkIdFromEntity(entity), labels)
+        else
+            target.removeLocalEntity(entity, labels)
+        end
+    end
 end)
 
 exportHandler('AddTargetModel', function(models, options)
