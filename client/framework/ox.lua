@@ -1,4 +1,11 @@
-local playerGroups = exports.ox_core.GetPlayerData()?.groups or {}
+if GetResourceState('ox_core') == 'missing' then return end
+
+local success, result = pcall(function()
+    return exports.ox_core.GetPlayerData().groups
+end)
+
+local playerGroups = success and result or {}
+PlayerItems = {}
 
 AddEventHandler('ox:playerLoaded', function(data)
     playerGroups = data.groups
@@ -9,10 +16,7 @@ RegisterNetEvent('ox:setGroup', function(name, grade)
     playerGroups[name] = grade
 end)
 
-local utils = require 'client.utils'
-
----@diagnostic disable-next-line: duplicate-set-field
-function utils.hasPlayerGotGroup(filter)
+function PlayerHasGroups(filter)
     local _type = type(filter)
 
     if _type == 'string' then

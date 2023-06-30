@@ -128,8 +128,6 @@ exportHandler('AddTargetBone', function(bones, options)
     exports.ox_target:addGlobalVehicle(options)
 end)
 
-local api = require 'client.api'
-
 exportHandler('AddTargetEntity', function(entities, options)
     if type(entities) ~= 'table' then entities = { entities } end
     options = convert(options)
@@ -138,9 +136,9 @@ exportHandler('AddTargetEntity', function(entities, options)
         local entity = entities[i]
 
         if NetworkGetEntityIsNetworked(entity) then
-            api.addEntity(NetworkGetNetworkIdFromEntity(entity), options)
+            target.addEntity(NetworkGetNetworkIdFromEntity(entity), options)
         else
-            api.addLocalEntity(entity, options)
+            target.addLocalEntity(entity, options)
         end
     end
 end)
@@ -152,49 +150,49 @@ exportHandler('RemoveTargetEntity', function(entities, labels)
         local entity = entities[i]
 
         if NetworkGetEntityIsNetworked(entity) then
-            api.removeEntity(NetworkGetNetworkIdFromEntity(entity), labels)
+            target.removeEntity(NetworkGetNetworkIdFromEntity(entity), labels)
         else
-            api.removeLocalEntity(entity, labels)
+            target.removeLocalEntity(entity, labels)
         end
     end
 end)
 
 exportHandler('AddTargetModel', function(models, options)
-    api.addModel(models, convert(options))
+    target.addModel(models, convert(options))
 end)
 
 exportHandler('RemoveTargetModel', function(models, labels)
-    api.removeModel(models, labels)
+    target.removeModel(models, labels)
 end)
 
 exportHandler('Ped', function(options)
-    api.addGlobalPed(convert(options))
+    target.addGlobalPed(convert(options))
 end)
 
 exportHandler('RemovePed', function(labels)
-    api.removeGlobalPed(labels)
+    target.removeGlobalPed(labels)
 end)
 
 exportHandler('Vehicle', function(options)
-    api.addGlobalVehicle(convert(options))
+    target.addGlobalVehicle(convert(options))
 end)
 
 exportHandler('RemoveVehicle', function(labels)
-    api.removeGlobalVehicle(labels)
+    target.removeGlobalVehicle(labels)
 end)
 
 exportHandler('Object', function(options)
-    api.addGlobalObject(convert(options))
+    target.addGlobalObject(convert(options))
 end)
 
 exportHandler('RemoveObject', function(labels)
-    api.removeGlobalObject(labels)
+    target.removeGlobalObject(labels)
 end)
 
 exportHandler('Player', function(options)
-    api.addGlobalPlayer(convert(options))
+    target.addGlobalPlayer(convert(options))
 end)
 
 exportHandler('RemovePlayer', function(labels)
-    api.removeGlobalPlayer(labels)
+    target.removeGlobalPlayer(labels)
 end)

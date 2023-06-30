@@ -1,3 +1,4 @@
+if GetResourceState('qb-core') == 'missing' then return end
 local QBCore = exports['qb-core']:GetCoreObject()
 
 local success, result = pcall(function()
@@ -5,20 +6,18 @@ local success, result = pcall(function()
 end)
 
 local playerData = success and result or {}
-local utils = require 'client.utils'
-local playerItems = utils.getItems()
+local usingOxInventory = GetResourceState('ox_inventory') ~= 'missing'
+PlayerItems = {}
 
 local function setPlayerItems()
     if not playerData?.items then return end
 
-    table.wipe(playerItems)
+    table.wipe(PlayerItems)
 
     for _, item in pairs(playerData.items) do
-        playerItems[item.name] = (playerItems[item.name] or 0) + item.amount
+        PlayerItems[item.name] = (PlayerItems[item.name] or 0) + item.amount
     end
 end
-
-local usingOxInventory = utils.hasExport('ox_inventory.Items')
 
 if not usingOxInventory then
     setPlayerItems()
@@ -37,8 +36,7 @@ RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
     if not usingOxInventory then setPlayerItems() end
 end)
 
----@diagnostic disable-next-line: duplicate-set-field
-function utils.hasPlayerGotGroup(filter)
+function PlayerHasGroups(filter)
     local _type = type(filter)
 
     if _type == 'string' then

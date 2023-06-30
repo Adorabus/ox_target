@@ -1,137 +1,70 @@
-if not lib.checkDependency('ox_lib', '3.0.0', true) then return end
+local isActive = false
+local isDisabled = false
 
-lib.locale()
+exports('disableTargeting', function(state)
+    if state then
+        isActive = false
+    end
 
-local utils = require 'client.utils'
-local state = require 'client.state'
-local getEntityOptions = require 'client.api'.getEntityOptions
+    isDisabled = state
+end)
 
-require 'client.debug'
-require 'client.defaults'
-require 'client.compat.qtarget'
-require 'client.compat.qb-target'
+local hasFocus = false
 
-local raycastFromCamera, getNearbyZones, drawZoneSprites, getCurrentZone in utils
+local function setNuiFocus(state, cursor)
+    if state then SetCursorLocation(0.5, 0.5) end
+
+    hasFocus = state
+    SetNuiFocus(state, cursor or false)
+    SetNuiFocusKeepInput(state)
+end
+
 local SendNuiMessage = SendNuiMessage
 local GetEntityCoords = GetEntityCoords
+local RaycastFromCamera = RaycastFromCamera
 local GetEntityType = GetEntityType
 local HasEntityClearLosToEntity = HasEntityClearLosToEntity
+local GetCurrentZone = GetCurrentZone
+local PlayerHasGroups = PlayerHasGroups or function() return true end
+local PlayerHasItems = PlayerHasItems
 local GetEntityBoneIndexByName = GetEntityBoneIndexByName
 local GetEntityBonePosition_2 = GetEntityBonePosition_2
 local next = next
 local GetEntityModel = GetEntityModel
+local GetEntityOptions = GetEntityOptions
 local IsDisabledControlJustPressed = IsDisabledControlJustPressed
 local DisableControlAction = DisableControlAction
 local DisablePlayerFiring = DisablePlayerFiring
 local options = {}
 local currentTarget = {}
-local currentMenu
-local menuHistory = {}
 
 -- Toggle ox_target, instead of holding the hotkey
 local toggleHotkey = GetConvarInt('ox_target:toggleHotkey', 0) == 1
 local mouseButton = GetConvarInt('ox_target:leftClick', 1) == 1 and 24 or 25
 local debug = GetConvarInt('ox_target:debug', 0) == 1
 
----@param option table
----@param distance number
----@param entityHit number
----@param endCoords vector3
-local function shouldHide(option, distance, entityHit, endCoords)
-    if option.menuName ~= currentMenu then
-        return true
-    end
+local function enableTargeting()
+    if isDisabled or isActive or IsNuiFocused() or IsPauseMenuActive() then return end
+    SendNuiMessage('{"event": "visible", "state": true}')
 
-    if option.distance and distance > option.distance then
-        return true
-    end
+    isActive = true
+    local flag, hit, entityHit, endCoords, distance, currentZone, nearbyZones, lastEntity, entityType, entityModel, hasTick = 511
+    local getNearbyZones, drawSprites = DrawSprites()
 
-    if option.groups and not utils.hasPlayerGotGroup(option.groups) then
-        return true
-    end
-
-    if option.items and not utils.hasPlayerGotItems(option.items, option.anyItem) then
-        return true
-    end
-
-    local bone = option.bones
-
-    if bone then
-        local _type = type(bone)
-
-        if _type == 'string' then
-            local boneId = GetEntityBoneIndexByName(entityHit, bone)
-
-            if boneId ~= -1 and #(endCoords - GetEntityBonePosition_2(entityHit, boneId)) <= 2 then
-                bone = boneId
-            else
-                return true
-            end
-        elseif _type == 'table' then
-            local closestBone, boneDistance
-
-            for j = 1, #bone do
-                local boneId = GetEntityBoneIndexByName(entityHit, bone[j])
-
-                if boneId ~= -1 then
-                    local dist = #(endCoords - GetEntityBonePosition_2(entityHit, boneId))
-
-                    if dist <= (boneDistance or 1) then
-                        closestBone = boneId
-                        boneDistance = dist
-                    end
-                end
-            end
-
-            if closestBone then
-                bone = closestBone
-            else
-                return true
-            end
-        end
-    end
-
-    if option.canInteract then
-        local success, resp = pcall(option.canInteract, entityHit, distance, endCoords, option.name, bone)
-        return not success or not resp
-    end
-end
-
-local function startTargeting()
-    if state.isDisabled() or state.isActive() or IsNuiFocused() or IsPauseMenuActive() then return end
-
-    state.setActive(true)
-
-    local flag = 511
-    local hit, entityHit, endCoords, distance, currentZone, nearbyZones, lastEntity, entityType, entityModel, hasTick, hasTarget
-
-    while state.isActive() do
-        if not state.isNuiFocused() and lib.progressActive() then
-            state.setActive(false)
-            break
-        end
-
+    while isActive do
         local playerCoords = GetEntityCoords(cache.ped)
-        hit, entityHit, endCoords = raycastFromCamera(flag)
+        hit, entityHit, endCoords = RaycastFromCamera(flag)
+        entityType = entityHit ~= 0 and GetEntityType(entityHit) or 0
         distance = #(playerCoords - endCoords)
-
-        if entityHit ~= 0 and entityHit ~= lastEntity then
-            local success, result = pcall(GetEntityType, entityHit)
-            entityType = success and result or 0
-        end
 
         if entityType == 0 then
             local _flag = flag == 511 and 26 or 511
-            local _hit, _entityHit, _endCoords = raycastFromCamera(_flag)
+            local _hit, _entityHit, _endCoords = RaycastFromCamera(_flag)
             local _distance = #(playerCoords - _endCoords)
 
             if _distance < distance then
                 flag, hit, entityHit, endCoords, distance = _flag, _hit, _entityHit, _endCoords, _distance
-
-                if entityHit ~= 0 then
-                    local success, result = pcall(GetEntityType, entityHit)
-                    entityType = success and result or 0
-                end
+                entityType = entityHit ~= 0 and GetEntityType(entityHit) or 0
             end
         end
 
@@ -140,14 +73,14 @@ local function startTargeting()
             local lastZone = currentZone
 
             if getNearbyZones then
+                ---@type CZone[]?, CZone?
                 nearbyZones, currentZone = getNearbyZones(endCoords)
             else
-                currentZone = getCurrentZone(endCoords)
+                ---@type CZone?
+                currentZone = GetCurrentZone(endCoords)
             end
 
             if lastZone ~= currentZone or entityHit ~= lastEntity then
-                currentMenu = nil
-
                 if next(options) then
                     table.wipe(options)
                     SendNuiMessage('{"event": "leftTarget"}')
@@ -172,12 +105,12 @@ local function startTargeting()
                     entityModel = success and result
 
                     if entityModel then
-                        newOptions = getEntityOptions(entityHit, entityType, entityModel)
+                        newOptions = GetEntityOptions(entityHit, entityType, entityModel)
                     end
+
                 end
             end
 
-            ---@type table<string, TargetOptions[]>
             options = newOptions or options or {}
 
             if currentZone then
@@ -205,109 +138,129 @@ local function startTargeting()
 
                 for i = 1, optionCount do
                     local option = v[i]
-                    local hide = shouldHide(option, distance, entityHit, endCoords)
+                    local hide
 
-                    if option.hide ~= hide then
-                        option.hide = hide
+                    if option.distance and distance > option.distance then
+                        hide = true
+                    end
 
-                        if not newOptions then
-                            newOptions = options
+                    if option.groups and not PlayerHasGroups(option.groups) then
+                        hide = true
+                    end
+
+                    if option.items and not PlayerHasItems(option.items, option.anyItem) then
+                        hide = true
+                    end
+
+                    local bone = option.bones
+
+                    if bone then
+                        local _type = type(bone)
+
+                        if _type == 'string' then
+                            local boneId = GetEntityBoneIndexByName(entityHit, bone)
+
+                            if boneId ~= -1 and #(endCoords - GetEntityBonePosition_2(entityHit, boneId)) <= 2 then
+                                bone = boneId
+                            else
+                                hide = true
+                            end
+                        elseif _type == 'table' then
+                            local closestBone, boneDistance
+
+                            for j = 1, #bone do
+                                local boneId = GetEntityBoneIndexByName(entityHit, bone[j])
+
+                                if boneId ~= -1 then
+                                    local dist = #(endCoords - GetEntityBonePosition_2(entityHit, boneId))
+
+                                    if dist <= (boneDistance or 1) then
+                                        closestBone = boneId
+                                        boneDistance = dist
+                                    end
+                                end
+                            end
+
+                            if closestBone then
+                                bone = closestBone
+                            else
+                                hide = true
+                            end
                         end
                     end
+
+                    if not hide and option.canInteract then
+                        local success, resp = pcall(option.canInteract, entityHit, distance, endCoords, option.name, bone)
+                        hide = not success or not resp
+                    end
+
+                    if not newOptions and v[i].hide ~= hide then
+                        newOptions = options
+                    end
+
+                    v[i].hide = hide
 
                     if hide then hidden += 1 end
                 end
             end
 
-
             if newOptions and next(newOptions) then
                 options = newOptions
 
                 if hidden == totalOptions then
-                    hasTarget = false
                     SendNuiMessage('{"event": "leftTarget"}')
                 else
-                    hasTarget = true
-
-                    if currentMenu then
-                        totalOptions += 1
-                        options.__builtin = {
-                            {
-                                icon = 'fa-solid fa-circle-chevron-left',
-                                label = locale('go_back'),
-                                name = 'builtin:goback',
-                                menuName = currentMenu,
-                                openMenu = 'home'
-                            },
-                        }
-                    end
-
                     SendNuiMessage(json.encode({
                         event = 'setTarget',
                         options = options
                     }, { sort_keys=true }))
                 end
             end
-        else
-            if hasTarget then
-                hasTarget = false
-                SendNuiMessage('{"event": "leftTarget"}')
-            end
-
-            if lastEntity then
-                if debug then SetEntityDrawOutline(lastEntity, false) end
-                if options then table.wipe(options) end
-
-                lastEntity = nil
-            else
-                Wait(50)
-            end
-        end
+        elseif lastEntity then
+            if debug then SetEntityDrawOutline(lastEntity, false) end
+            if options then table.wipe(options) end
+            SendNuiMessage('{"event": "leftTarget"}')
+            lastEntity = nil
+        else Wait(50) end
 
         if toggleHotkey and IsPauseMenuActive() then
-            state.setActive(false)
+            isActive = false
         end
 
         if not hasTick then
             hasTick = true
-            local dict, texture = utils.getTexture()
 
             CreateThread(function()
-                while state.isActive() do
+                while isActive do
                     if debug then
                         ---@diagnostic disable-next-line: param-type-mismatch
                         DrawMarker(28, endCoords.x, endCoords.y, endCoords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.2, 255, 42, 24, 100, false, false, 0, true, false, false, false)
                     end
 
                     if nearbyZones then
-                        drawZoneSprites(dict, texture)
+                        drawSprites(endCoords)
                     end
 
                     DisablePlayerFiring(cache.playerId, true)
                     DisableControlAction(0, 25, true)
-                    DisableControlAction(0, 140, true)
-                    DisableControlAction(0, 141, true)
-                    DisableControlAction(0, 142, true)
 
-                    if state.isNuiFocused() then
+                    if hasFocus then
                         DisableControlAction(0, 1, true)
                         DisableControlAction(0, 2, true)
 
-                        if not hasTarget or options and IsDisabledControlJustPressed(0, 25) then
-                            state.setNuiFocus(false, false)
+                        if options and IsDisabledControlJustPressed(0, 25) then
+                            setNuiFocus(false, false)
                         end
-                    elseif hasTarget and IsDisabledControlJustPressed(0, mouseButton) then
-                        state.setNuiFocus(true, true)
+                    elseif options and IsDisabledControlJustPressed(0, mouseButton) then
+                        setNuiFocus(true, true)
                     end
 
                     Wait(0)
                 end
-
-                SetStreamedTextureDictAsNoLongerNeeded(dict)
             end)
         end
 
-        if not hasTarget then
+        if not next(options) then
             flag = flag == 511 and 26 or 511
         end
 
@@ -318,44 +271,35 @@ local function startTargeting()
         SetEntityDrawOutline(lastEntity, false)
     end
 
-    state.setNuiFocus(false)
+    setNuiFocus(false)
     SendNuiMessage('{"event": "visible", "state": false}')
     table.wipe(currentTarget)
     table.wipe(options)
 end
 
-do
-    ---@type CKeybind
-    local keybind = {
-        name = 'ox_target',
-        defaultKey = GetConvar('ox_target:defaultHotkey', 'LMENU'),
-        defaultMapper = 'keyboard',
-        description = locale('toggle_targeting'),
-    }
-
-    if toggleHotkey then
-        function keybind:onPressed()
-            if state.isActive() then
-                return state.setActive(false)
-            end
-
-            return startTargeting()
-        end
-    else
-        keybind.onPressed = startTargeting
-
-        function keybind:onReleased()
-            state.setActive(false)
-        end
-    end
-
-    lib.addKeybind(keybind)
+local function disableTargeting()
+    isActive = false
 end
 
----@generic T
----@param option T
----@param server? boolean
----@return T
+-- Default keybind to toggle targeting (https://docs.fivem.net/docs/game-references/input-mapper-parameter-ids/keyboard)
+local hotkey = GetConvar('ox_target:defaultHotkey', 'LMENU')
+
+if toggleHotkey then
+    RegisterCommand('ox_target', function()
+        if isActive then
+            return disableTargeting()
+        end
+
+        return enableTargeting()
+    end, false)
+
+    RegisterKeyMapping('ox_target', locale('toggle_targeting'), 'keyboard', hotkey)
+else
+    RegisterCommand('+ox_target', function() CreateThread(enableTargeting) end, false)
+    RegisterCommand('-ox_target', disableTargeting, false)
+    RegisterKeyMapping('+ox_target', locale('toggle_targeting'), 'keyboard', hotkey)
+end
+
 local function getResponse(option, server)
     local response = table.clone(option)
     response.entity = currentTarget.entity
@@ -382,30 +326,11 @@ end
 
 RegisterNUICallback('select', function(data, cb)
     cb(1)
+    setNuiFocus(false)
 
-    ---@type TargetOptions?
     local option = options?[data[1]][data[2]]
 
     if option then
-        if option.openMenu then
-            local menuDepth = #menuHistory
-
-            if option.name == 'builtin:goback' then
-                option.menuName = option.openMenu
-                option.openMenu = menuHistory[menuDepth]
-
-                if menuDepth > 0 then
-                    menuHistory[menuDepth] = nil
-                end
-            else
-                menuHistory[menuDepth + 1] = currentMenu
-            end
-
-            currentMenu = option.openMenu ~= 'home' and option.openMenu or nil
-        else
-            state.setNuiFocus(false)
-        end
-
         if option.onSelect then
             option.onSelect(option.qtarget and currentTarget.entity or getResponse(option))
         elseif option.export then
@@ -419,7 +344,7 @@ RegisterNUICallback('select', function(data, cb)
         end
     end
 
-    if not option?.openMenu and IsNuiFocused() then
-        state.setActive(false)
+    if IsNuiFocused() then
+        isActive = false
     end
 end)
